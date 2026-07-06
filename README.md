@@ -1,8 +1,6 @@
-# TCL 空调接入 Home Assistant（绕过"仅 App 控制"限制）
+# TCL 空调 Home Assistant 集成（tcl_ac）
 
-让**"仅支持 TCL App 控制"**的 TCL 空调接入 Home Assistant：能读真实运行状态、能开关机 / 调温（16~31°C）/ 切换模式（制冷·制热·自动·除湿·送风）/ 风速 / 摆风。**零额外硬件成本。**
-
-> 适用场景：你的空调在微信小程序里显示"设备仅支持 TCL App 控制"、涂鸦 App 搜不到、原版小程序集成（ndwzy / qwqqq6）加载不出设备。
+部分 TCL 空调在微信小程序内标记为"设备仅支持 TCL App 控制"（`weChatControl: "0"`），通用小程序集成（ndwzy/qwqqq6）无法接入。本集成复用 App 登录通道的 token，将控制请求 `source` 伪装为 App 直接下发指令，支持状态查询、开关机、调温（16~31°C）、模式/风速/摆风控制。支持 config_flow UI 添加，可选填账号密码启用 refreshToken 自动续期。
 
 ---
 
