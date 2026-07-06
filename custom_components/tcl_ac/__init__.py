@@ -15,7 +15,15 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """
     domain_cfg = config.get(DOMAIN, {})
     device_id = domain_cfg.get("device_id") if isinstance(domain_cfg, dict) else None
+    username = domain_cfg.get("username") if isinstance(domain_cfg, dict) else None
+    password = domain_cfg.get("password") if isinstance(domain_cfg, dict) else None
     hass.async_create_task(
-        async_load_platform(hass, "climate", DOMAIN, {"device_id": device_id}, config)
+        async_load_platform(
+            hass,
+            "climate",
+            DOMAIN,
+            {"device_id": device_id, "username": username, "password": password},
+            config,
+        )
     )
     return True

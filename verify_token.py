@@ -72,7 +72,7 @@ def list_devices():
     print("\n=== 设备列表 ===")
     for d in devices:
         print(f"名称:{d.get('name')}  设备Id:{d.get('deviceId')}  在线:{d.get('online')}  productKey:{d.get('productKey')}")
-    print("\n把空调对应的 deviceId 填到 const.py 的 DEVICE_ID 和 tcl_ac.py 的 DEVICE_ID")
+    print("\n把空调对应的 deviceId 填到 HA 的 configuration.yaml 的 tcl_ac: 段（device_id: \"...\")")
 
 if __name__ == "__main__":
     list_devices()

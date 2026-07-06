@@ -19,11 +19,15 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
 from .const import (
-    CONFIG_FILE, DEVICE_ID,
+    CONFIG_FILE, DEVICE_ID, USERNAME, PASSWORD,
     APP_ID, APP_TENANT_ID, APP_SECRET,
+    IOS_APP_ID, IOS_APP_SECRET, IOS_TENANT_ID, IOS_APP_VERSION,
+    IOS_PLATFORM_TYPE, IOS_STORE_UUID, IOS_USER_AGENT, IOS_REPORT_STATE,
+    LOGIN_API,
     CONTROL_SOURCE, PLATFORM_TYPE, USER_AGENT,
     MODE_MAP, MODE_REVERSE, FAN_MAP,
 )
+from . import crypto
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,13 +45,21 @@ async def async_setup_platform(
     if not device_id:
         _LOGGER.error("tcl_ac: device_id 未配置，请在 configuration.yaml 的 tcl_ac: 段填写 device_id")
         return
-    async_add_entities([TclAcClimate(hass, device_id)], update_before_add=True)
+    # 账号密码兜底：从 discovery 传入，缺省用 const 里的 USERNAME/PASSWORD
+    username = discovery.get("username") or USERNAME
+    password = discovery.get("password") or PASSWORD
+    async_add_entities(
+        [TclAcClimate(hass, device_id, username, password)],
+        update_before_add=True,
+    )
 
 class TclApi:
     """TCL IoT API (stdlib only, runs in executor)."""
 
-    def __init__(self, device_id: str):
+    def __init__(self, device_id: str, username: str = "", password: str = ""):
         self._device_id = device_id
+        self._username = username
+        self._password = password
         self._token = ""
         self._token_ts = 0.0
 
@@ -60,7 +72,13 @@ class TclApi:
             json.dump(cfg, f, indent=2, ensure_ascii=False)
 
     def _http(self, url, headers, data=None, method="GET"):
-        body = json.dumps(data).encode() if data is not None else None
+        # data 可为 dict（自动 JSON 编码）或已是 bytes（如 RSA 加密后的登录体）
+        if isinstance(data, (bytes, bytearray)):
+            body = bytes(data)
+        elif data is not None:
+            body = json.dumps(data).encode()
+        else:
+            body = None
         req = urllib.request.Request(url, data=body, headers=headers, method=method)
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
@@ -72,29 +90,91 @@ class TclApi:
         if self._token and (time.time() - self._token_ts) < 3000:
             return self._token
         cfg = self._load_config()
-        url = (
-            f"https://cn.account.tcl.com/auth/auth/refershToken"
-            f"?appId={APP_ID}&accountId={cfg.get('account_id', '')}"
-            f"&tenantId={APP_TENANT_ID}&appSecret={APP_SECRET}"
-        )
-        headers = {
-            "Host": "cn.account.tcl.com",
-            "Content-Type": "application/json;charset=UTF-8",
-            "t-platform-type": "iOS",
-            "Encrypt": "false",
-            "EncryptVersion": "2.0",
-            "t-app-version": "2.7.33",
-            "t-store-uuid": "TCL+",
-            "User-Agent": "TCLPlus/2.6.1",
-            "refreshToken": cfg.get("refresh_token", ""),
+        # 1) 先用 refreshToken 续期
+        try:
+            url = (
+                f"https://cn.account.tcl.com/auth/auth/refershToken"
+                f"?appId={APP_ID}&accountId={cfg.get('account_id', '')}"
+                f"&tenantId={APP_TENANT_ID}&appSecret={APP_SECRET}"
+            )
+            headers = {
+                "Host": "cn.account.tcl.com",
+                "Content-Type": "application/json;charset=UTF-8",
+                "t-platform-type": "iOS",
+                "Encrypt": "false",
+                "EncryptVersion": "2.0",
+                "t-app-version": "2.7.33",
+                "t-store-uuid": "TCL+",
+                "User-Agent": "TCLPlus/2.6.1",
+                "refreshToken": cfg.get("refresh_token", ""),
+            }
+            result = self._http(url, headers)
+            self._token = result["accessToken"]
+            self._token_ts = time.time()
+            cfg["access_token"] = self._token
+            cfg["refresh_token"] = result["refreshToken"]
+            cfg["access_token_ts"] = self._token_ts
+            self._save_config(cfg)
+            _LOGGER.debug("tcl_ac: token 刷新成功")
+            return self._token
+        except Exception as err:
+            # 2) refresh 失败 → 若有账号密码则自动登录兜底
+            if self._username and self._password:
+                _LOGGER.warning(
+                    "tcl_ac: refreshToken 失效（%s），尝试账号密码登录兜底", err
+                )
+                return self.login_by_password(self._username, self._password)
+            # 3) 无账号密码 → 明确告警，提示用户重抓
+            _LOGGER.error(
+                "tcl_ac: token 已过期且未配置账号密码，请在 Windows 重跑 grab_token.py "
+                "覆盖 /config/tcl_token.json，或在 configuration.yaml 的 tcl_ac: 段填 username/password"
+            )
+            raise
+
+    def login_by_password(self, username: str, password: str) -> str:
+        """账号密码登录兜底：RSA 加密参数 → 登录 → 写回 tcl_token.json。"""
+        import uuid
+
+        device_id = str(uuid.uuid4()).upper()
+        params = {
+            "deviceId": device_id,
+            "password": crypto.md5_hash(password),
+            "channel": IOS_STORE_UUID,
+            "tenantId": IOS_TENANT_ID,
+            "appSecret": IOS_APP_SECRET,
+            "username": username,
+            "appId": IOS_APP_ID,
+            "reportState": IOS_REPORT_STATE,
         }
-        result = self._http(url, headers)
+        url = f"{LOGIN_API}?{crypto.encrypt_url_params(params)}"
+        body = crypto.encrypt_body(params)
+        headers = {
+            "Content-Type": "application/json;charset=UTF-8",
+            "t-platform-type": IOS_PLATFORM_TYPE,
+            "uid": "",
+            "Accept": "*/*",
+            "cid": str(uuid.uuid4()).upper(),
+            "Accept-Language": "zh-Hans-CN;q=1, zh-Hant-CN;q=0.9, en-CN;q=0.8",
+            "token": "",
+            "EncryptVersion": "2.0",
+            "t-app-version": IOS_APP_VERSION,
+            "t-store-uuid": IOS_STORE_UUID,
+            "Encrypt": "true",
+            "User-Agent": IOS_USER_AGENT,
+            "t-application-name": "",
+        }
+        result = self._http(url, headers, data=body, method="POST")
+        if "accessToken" not in result:
+            raise RuntimeError(f"TCL 密码登录失败: {result.get('message', result)}")
         self._token = result["accessToken"]
         self._token_ts = time.time()
+        cfg = self._load_config()
+        cfg["account_id"] = result["accountId"]
         cfg["access_token"] = self._token
         cfg["refresh_token"] = result["refreshToken"]
         cfg["access_token_ts"] = self._token_ts
         self._save_config(cfg)
+        _LOGGER.info("tcl_ac: 账号密码登录成功，已更新 token")
         return self._token
 
     def _iot_headers(self):
@@ -151,10 +231,10 @@ class TclAcClimate(ClimateEntity):
         | ClimateEntityFeature.TURN_OFF
     )
 
-    def __init__(self, hass: HomeAssistant, device_id: str):
+    def __init__(self, hass: HomeAssistant, device_id: str, username: str = "", password: str = ""):
         self.hass = hass
         self._device_id = device_id
-        self._api = TclApi(device_id)
+        self._api = TclApi(device_id, username, password)
         self._attr_hvac_mode = HVACMode.OFF
         self._attr_current_temperature = None
         self._attr_target_temperature = 26

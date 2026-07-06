@@ -14,10 +14,23 @@ TCL 在**设备级**锁死了微信小程序通道（字段 `weChatControl: "0"`
 
 ---
 
+## Token 自动续期（重点）
+
+组件内部有两层续期，基本做到**零维护**：
+
+1. **accessToken（~1 小时）**：每次轮询自动用 `refreshToken` 换新，你无感。
+2. **refreshToken（~60 天）**：
+   - **填了账号密码 = 全自动**：`refreshToken` 失效时，组件用你的 TCL 账号密码（RSA 加密后登录）自动换发新 token 并写入 `/config/tcl_token.json`，永久不用手动抓包。
+   - **没填账号密码 = 需手动**：`refreshToken` 过期后组件会在日志报错提示，此时重跑一次 `grab_token.py` 覆盖 `tcl_token.json` 即可。
+
+> 账号密码登录采用 TCL App 内置的 **RSA-1024 公钥加密**（密码先 MD5 再整体加密，明文密码不出本机），传输走 HTTPS。密码只存在你的 `configuration.yaml` 本地文件里，不会进代码或公开仓库。
+
+---
+
 ## 一、HACS 安装
 
 1. HA → HACS → 右上角菜单 → **自定义仓库**
-2. 仓库 URL 填你自己的：`https://github.com/<你的GitHub用户名>/tcl_ac_ha`
+2. 仓库 URL 填你自己的：`https://github.com/<你的GitHub用户名>/tcl-ac-ha`
 3. 类别选 **Integration** → 添加
 4. HACS 里搜 **TCL AC (App-controlled)** → 下载 → **重启 HA**
 
@@ -82,10 +95,14 @@ venv\Scripts\python.exe verify_token.py
 ```yaml
 tcl_ac:
   device_id: "36376945"   # 换成你上一步查到的 deviceId
+  # 以下两项填了就能永久自动续期，不填则 refreshToken 过期需手动重抓
+  username: "13800138000" # ← 你的 TCL 账号（手机号）
+  password: "你的TCL密码"  # ← 你的 TCL 密码（明文，仅存于本地）
 ```
 保存 → **重启 HA**。
 
-> device_id 写在 configuration.yaml 里，HACS 更新组件不会覆盖它。
+> device_id / username / password 都写在 configuration.yaml 里，HACS 更新组件不会覆盖它们。
+> 只填 device_id、不填账号密码 = 仍可用，只是 refreshToken 过期后需手动重抓（见上「Token 自动续期」）。
 
 ---
 

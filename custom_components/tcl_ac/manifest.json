@@ -1,10 +1,10 @@
 {
   "domain": "tcl_ac",
   "name": "TCL AC (App-controlled)",
-  "codeowners": ["@yourgithub"],
+  "codeowners": ["@xwgm"],
   "config_flow": false,
   "dependencies": [],
-  "requirements": [],
+  "requirements": ["cryptography>=42.0.0"],
   "iot_class": "cloud_polling",
-  "version": "1.0.0"
+  "version": "1.1.0"
 }
