@@ -27,7 +27,7 @@ class TclAcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # device_id 作为 unique_id，避免重复添加同一台空调
                 await self.async_set_unique_id(device_id)
                 self._abort_if_unique_id_configured()
-                return await self.async_create_entry(
+                return self.async_create_entry(
                     title=f"TCL 空调 ({device_id})",
                     data={
                         "device_id": device_id,
@@ -43,7 +43,7 @@ class TclAcConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional("password"): str,
             }
         )
-        return await self.async_show_form(
+        return self.async_show_form(
             step_id="user",
             data_schema=data_schema,
             errors=errors,
