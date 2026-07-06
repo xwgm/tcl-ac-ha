@@ -1,0 +1,10 @@
+{
+  "domain": "tcl_ac",
+  "name": "TCL AC (App-controlled)",
+  "codeowners": ["@yourgithub"],
+  "config_flow": false,
+  "dependencies": [],
+  "requirements": [],
+  "iot_class": "cloud_polling",
+  "version": "1.0.0"
+}
