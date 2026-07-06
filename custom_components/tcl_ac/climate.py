@@ -44,7 +44,7 @@ async def async_setup_entry(
     if not device_id:
         _LOGGER.error("tcl_ac: device_id 未配置，请在 UI 添加集成时填写设备 ID")
         return
-    # 账号密码兜底：从 config entry 传入，用于 token 自动续期
+    # 账号密码：从 config entry 传入，用于 token 自动续期
     username = data.get("username") or ""
     password = data.get("password") or ""
     async_add_entities(
@@ -117,10 +117,10 @@ class TclApi:
             _LOGGER.debug("tcl_ac: token 刷新成功")
             return self._token
         except Exception as err:
-            # 2) refresh 失败 → 若有账号密码则自动登录兜底
+            # 2) refresh 失败且有账号密码 → 自动登录获取新 token
             if self._username and self._password:
                 _LOGGER.warning(
-                    "tcl_ac: refreshToken 失效（%s），尝试账号密码登录兜底", err
+                    "tcl_ac: refreshToken 失效（%s），尝试用账号密码重新登录", err
                 )
                 return self.login_by_password(self._username, self._password)
             # 3) 无账号密码 → 明确告警，提示用户重抓
@@ -131,7 +131,7 @@ class TclApi:
             raise
 
     def login_by_password(self, username: str, password: str) -> str:
-        """账号密码登录兜底：RSA 加密参数 → 登录 → 写回 tcl_token.json。"""
+        """账号密码登录：加密参数 → 登录 → 写回 token 文件。"""
         import uuid
 
         device_id = str(uuid.uuid4()).upper()
@@ -177,7 +177,7 @@ class TclApi:
         return self._token
 
     def _iot_headers(self):
-        # 改造点：伪装成 App 请求（原版带 MicroMessenger/小程序标识）
+        # 请求标识
         return {
             "Host": "io.zx.tcljd.com",
             "accessToken": self.get_token(),
@@ -200,7 +200,7 @@ class TclApi:
         url = f"https://io.zx.tcljd.com/v1/control/property/{self._device_id}"
         body = {
             "msgId": f"ha_{int(random.random()*1e5)}_{int(time.time()*1000)}",
-            "source": CONTROL_SOURCE,  # 改造点：伪装成 app 请求
+            "source": CONTROL_SOURCE,  # 控制请求 source 参数
             "version": "3.0.0",
             "params": [{k: v} for k, v in attrs.items()],
         }

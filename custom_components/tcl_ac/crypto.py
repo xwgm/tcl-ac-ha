@@ -1,7 +1,4 @@
-"""TCL Plus 登录加密工具（从 ndwzy/tcl-ha 逆向移植）。
-
-用于「账号密码登录」兜底刷新 token：密码登录接口要求对参数/请求体做
-RSA-1024(PKCS1 v1.5) 加密，公钥是 TCL App 自带、硬编码在客户端里的公开密钥。
+"""登录参数加密工具。
 
 依赖：cryptography
 """
@@ -14,7 +11,7 @@ import urllib.parse
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import serialization
 
-# LoginSDK 1024位 RSA 公钥（TCL App 内置，公开可逆）
+# RSA 公钥（1024位）
 PUBLIC_KEY_LOGIN_SDK = (
     "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDLuCAxtV1Omu216OFdY0p2ypPR"
     "LptloLgMqvpmgkXD/SaB5RPx5oTzo5fdWjeYAx8N6YAe0DDJD5LsmNGhvVIiKOz2"
