@@ -33,6 +33,7 @@ TCL 在**设备级**锁死了微信小程序通道（字段 `weChatControl: "0"`
 2. 仓库 URL 填你自己的：`https://github.com/<你的GitHub用户名>/tcl-ac-ha`
 3. 类别选 **Integration** → 添加
 4. HACS 里搜 **TCL AC (App-controlled)** → 下载 → **重启 HA**
+5. 然后按「五、在 HA 里添加集成」在 UI 里搜索 TCL 并填写设备 ID 完成添加
 
 > 组件只含代码，**不含 token**。token 和 device_id 需你自行提供（见下）。
 
@@ -89,26 +90,25 @@ venv\Scripts\python.exe verify_token.py
 
 ---
 
-## 五、配置 configuration.yaml
+## 五、在 HA 里添加集成（UI 添加，无需改 YAML）
 
-同样用 **Studio Code Server / File editor** 打开 `/config/configuration.yaml`，追加：
-```yaml
-tcl_ac:
-  device_id: "36376945"   # 换成你上一步查到的 deviceId
-  # 以下两项填了就能永久自动续期，不填则 refreshToken 过期需手动重抓
-  username: "13800138000" # ← 你的 TCL 账号（手机号）
-  password: "你的TCL密码"  # ← 你的 TCL 密码（明文，仅存于本地）
-```
-保存 → **重启 HA**。
+组件已支持 **配置流（config_flow）**，不用编辑 `configuration.yaml`：
 
-> device_id / username / password 都写在 configuration.yaml 里，HACS 更新组件不会覆盖它们。
-> 只填 device_id、不填账号密码 = 仍可用，只是 refreshToken 过期后需手动重抓（见上「Token 自动续期」）。
+1. HA → 设置 → 设备与服务 → 右下角「**添加集成**」
+2. 搜索 **TCL AC**（或输入 `tcl`），点它
+3. 在弹出的表单里填：
+   - **设备 ID**：你上一步查到的 `deviceId`（如 `36376945`）
+   - **用户名 / 密码**：可选。**填了 = 永久自动续期**（refreshToken 过期时自动用账号密码登录换新 token）；不填 = refreshToken 过期后需手动重抓一次 `tcl_token.json`
+4. 提交 → 空调实体立即出现，可控制并显示室温。
+
+> 设备 ID、账号密码都保存在 HA 配置数据库里（不是 YAML），HACS 更新组件不会覆盖。
+> 想删掉重加：设置 → 设备与服务 → TCL AC → 删除即可。
 
 ---
 
 ## 六、验证
 
-HA → 设置 → 设备与服务 → 实体 → 搜「TCL」，应出现 `climate.tcl_ac_climate` 卡片，可控制并显示室温。
+HA → 设置 → 设备与服务 → 实体 → 搜「TCL」，应出现 `climate.tcl_空调_<设备ID>` 卡片，可控制并显示室温。
 
 ---
 

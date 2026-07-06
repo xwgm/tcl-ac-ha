@@ -1,29 +1,21 @@
 """TCL Air Conditioner integration (App-controlled bypass)."""
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.discovery import async_load_platform
-from homeassistant.helpers.typing import ConfigType
 
 DOMAIN = "tcl_ac"
 
-async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up via YAML.
 
-    device_id 可在 configuration.yaml 的 tcl_ac: 段配置，
-    HACS 更新组件时不会覆盖你的配置：
-        tcl_ac:
-          device_id: "36376945"
-    """
-    domain_cfg = config.get(DOMAIN, {})
-    device_id = domain_cfg.get("device_id") if isinstance(domain_cfg, dict) else None
-    username = domain_cfg.get("username") if isinstance(domain_cfg, dict) else None
-    password = domain_cfg.get("password") if isinstance(domain_cfg, dict) else None
-    hass.async_create_task(
-        async_load_platform(
-            hass,
-            "climate",
-            DOMAIN,
-            {"device_id": device_id, "username": username, "password": password},
-            config,
-        )
-    )
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up TCL AC from a config entry (UI 添加集成时创建)."""
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN][entry.entry_id] = entry.data
+    await hass.config_entries.async_forward_entry_setups(entry, ["climate"])
     return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a config entry."""
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, ["climate"])
+    if unload_ok:
+        hass.data[DOMAIN].pop(entry.entry_id, None)
+    return unload_ok

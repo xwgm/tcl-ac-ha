@@ -14,9 +14,9 @@ from homeassistant.components.climate import (
     HVACMode,
 )
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
 from .const import (
     CONFIG_FILE, DEVICE_ID, USERNAME, PASSWORD,
@@ -33,21 +33,20 @@ _LOGGER = logging.getLogger(__name__)
 
 SCAN_INTERVAL = timedelta(seconds=30)
 
-async def async_setup_platform(
+async def async_setup_entry(
     hass: HomeAssistant,
-    config: ConfigType,
+    entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
-    discovery_info: DiscoveryInfoType | None = None,
 ) -> None:
-    """Set up the TCL AC platform."""
-    discovery = discovery_info or {}
-    device_id = discovery.get("device_id") or DEVICE_ID
+    """Set up the TCL AC platform from a config entry (UI 添加集成时调用)."""
+    data = entry.data or {}
+    device_id = data.get("device_id") or ""
     if not device_id:
-        _LOGGER.error("tcl_ac: device_id 未配置，请在 configuration.yaml 的 tcl_ac: 段填写 device_id")
+        _LOGGER.error("tcl_ac: device_id 未配置，请在 UI 添加集成时填写设备 ID")
         return
-    # 账号密码兜底：从 discovery 传入，缺省用 const 里的 USERNAME/PASSWORD
-    username = discovery.get("username") or USERNAME
-    password = discovery.get("password") or PASSWORD
+    # 账号密码兜底：从 config entry 传入，用于 token 自动续期
+    username = data.get("username") or ""
+    password = data.get("password") or ""
     async_add_entities(
         [TclAcClimate(hass, device_id, username, password)],
         update_before_add=True,
