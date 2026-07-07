@@ -1,13 +1,13 @@
 """TCL 冰箱实体：温度(Number) + 模式(Select) + 童锁(Lock) + 传感器(Sensor) + 电源(Switch)。"""
 import logging
-from homeassistant.components.lock import LockEntity, LockEntityFeature
-from homeassistant.components.number import NumberEntity, NumberMode
+from homeassistant.components.lock import LockEntity
+from homeassistant.components.number import NumberEntity
 from homeassistant.components.select import SelectEntity
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import (
     FRIDGE_MODES, FRIDGE_MODE_LABELS, FRIDGE_MODE_VALUES,
@@ -21,37 +21,20 @@ _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "tcl_ac"
 
-
-async def async_setup_entry(
-    hass: HomeAssistant,
-    entry_data: dict,
-    device_info: dict,
-    api: TclApi,
-    async_add_entities: AddEntitiesCallback,
-) -> None:
-    """为单台冰箱设备创建全部子实体。"""
-    device_id = device_info["deviceId"]
-    name = device_info.get("nickName", f"TCL 冰箱 {device_id[-4:]}")
-    entities: list = [
-        TclFridgeFridgeTemp(hass, api, device_id, name),
-        TclFridgeFreezerTemp(hass, api, device_id, name),
-        TclFridgeMode(hass, api, device_id, name),
-        TclFridgeChildLock(hass, api, device_id, name),
-        TclFridgePowerSwitch(hass, api, device_id, name),
-        # 温度传感器（只读显示当前值）
-        TclFridgeSensor(hass, api, device_id, name, "冷藏室温度", "fridgeTemp", "°C"),
-        TclFridgeSensor(hass, api, device_id, name, "冷冻室温度", "freezerTemp", "°C"),
-        TclFridgeSensor(hass, api, device_id, name, "安温室温度", "variableTemp", "°C"),
-    ]
-    async_add_entities(entities, update_before_add=True)
+# 兼容：HA <2024.x 没有 NumberMode
+try:
+    from homeassistant.components.number import NumberMode
+    HAS_NUMBER_MODE = True
+except ImportError:
+    HAS_NUMBER_MODE = False
 
 
 # ──────────────── 基类 ────────────────
 
-class _TclFridgeEntity(RestoreEntity):
-    """冰箱实体的基类。"""
+class _TclFridgeEntity(Entity):
+    """冰箱实体的基类（用 Entity 而非 RestoreEntity，避免 restore 复杂度）。"""
 
-    _attr_should_poll = True  # 轮询模式
+    _attr_should_poll = True
 
     def __init__(self, hass: HomeAssistant, api: TclApi, device_id: str, device_name: str):
         self.hass = hass
@@ -86,9 +69,7 @@ class _TclFridgeEntity(RestoreEntity):
 class TclFridgeFridgeTemp(_TclFridgeEntity, NumberEntity):
     """冷藏室目标温度设置（2~8°C）。"""
 
-    _attr_name = None  # 由 unique_id 区分
     _attr_icon = "mdi:temperature-celsius"
-    _attr_mode = NumberMode.SLIDER
     _attr_native_min_value = FRIDGE_FRIDGE_TEMP_MIN
     _attr_native_max_value = FRIDGE_FRIDGE_TEMP_MAX
     _attr_native_step = 1
@@ -97,6 +78,8 @@ class TclFridgeFridgeTemp(_TclFridgeEntity, NumberEntity):
         super().__init__(hass, api, device_id, device_name)
         self._entity_name = f"{device_name} 冷藏室温度"
         self._attr_unique_id = f"tcl_fridge_{device_id}_fridge_temp"
+        if HAS_NUMBER_MODE:
+            self._attr_mode = NumberMode.SLIDER
 
     @property
     def name(self):
@@ -119,7 +102,6 @@ class TclFridgeFreezerTemp(_TclFridgeEntity, NumberEntity):
     """冷冻室目标温度设置（-24~-15°C）。"""
 
     _attr_icon = "mdi:snowflake-thermometer"
-    _attr_mode = NumberMode.SLIDER
     _attr_native_min_value = FRIDGE_FREEZER_TEMP_MIN
     _attr_native_max_value = FRIDGE_FREEZER_TEMP_MAX
     _attr_native_step = 1
@@ -128,6 +110,8 @@ class TclFridgeFreezerTemp(_TclFridgeEntity, NumberEntity):
         super().__init__(hass, api, device_id, device_name)
         self._entity_name = f"{device_name} 冷冻室温度"
         self._attr_unique_id = f"tcl_fridge_{device_id}_freezer_temp"
+        if HAS_NUMBER_MODE:
+            self._attr_mode = NumberMode.SLIDER
 
     @property
     def name(self):
@@ -135,12 +119,12 @@ class TclFridgeFreezerTemp(_TclFridgeEntity, NumberEntity):
 
     @property
     def native_value(self):
-        return float(self._get("freezerSetTemp", -18))
+        return float(self._get("freezeSetTemp", -18))
 
     async def async_set_native_value(self, value: float):
         await self.hass.async_add_executor_job(
             self._api.send_control, self._device_id,
-            {"freezerSetTemp": int(value)},
+            {"freezeSetTemp": int(value)},
         )
 
 
@@ -186,7 +170,6 @@ class TclFridgeMode(_TclFridgeEntity, SelectEntity):
 class TclFridgeChildLock(_TclFridgeEntity, LockEntity):
     """冰箱童锁开关。"""
 
-    _attr_name = None
     _attr_icon = "mdi:lock-outline"
 
     def __init__(self, hass, api, device_id, device_name):
@@ -224,7 +207,6 @@ class TclFridgeChildLock(_TclFridgeEntity, LockEntity):
 class TclFridgePowerSwitch(_TclFridgeEntity, SwitchEntity):
     """冰箱主电源开关。"""
 
-    _attr_name = None
     _attr_icon = "mdi:power-plug"
 
     def __init__(self, hass, api, device_id, device_name):
@@ -275,8 +257,8 @@ class TclFridgeSensor(_TclFridgeEntity, SensorEntity):
         self._status_key = status_key
         self._unit = unit
         self._attr_unique_id = f"tcl_fridge_{device_id}_{status_key}"
-        if unit == "°C":
-            self._attr_native_unit_of_measurement = "°C"
+        if unit == "\u00b0C":
+            self._attr_native_unit_of_measurement = "\u00b0C"
             self._attr_device_class = "temperature"
             self._attr_icon = "mdi:thermometer"
 
