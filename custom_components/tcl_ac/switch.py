@@ -1,4 +1,5 @@
 """Switch 平台：通用设备电源开关 + 冰箱主电源。"""
+from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -6,11 +7,10 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import DOMAIN, CATEGORY_AC, CATEGORY_FRIDGE
 from . import __init__
 from .api import TclApi
-from .climate import TclAcClimate  # noqa: F401 - 仅用于类型引用
 from .refrigerator import TclFridgePowerSwitch
 
 
-class TclGenericSwitch:
+class TclGenericSwitch(SwitchEntity):
     """TCL 通用设备电源开关（非空调/非冰箱）。"""
 
     _attr_should_poll = True
