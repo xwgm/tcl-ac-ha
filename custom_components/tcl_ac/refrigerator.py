@@ -134,7 +134,7 @@ class TclFridgeMode(_TclFridgeEntity, SelectEntity):
     """冰箱运行模式选择（AI智能 / 速冷 / 速冻）。"""
 
     _attr_icon = "mdi:tune"
-    _attr_options = FRIDGE_MODES
+    _attr_options = [FRIDGE_MODE_LABELS.get(m, m) for m in FRIDGE_MODES]
 
     def __init__(self, hass, api, device_id, device_name):
         super().__init__(hass, api, device_id, device_name)
@@ -150,19 +150,18 @@ class TclFridgeMode(_TclFridgeEntity, SelectEntity):
         mode_val = self._get("workMode", 0)
         for k, v in FRIDGE_MODE_VALUES.items():
             if v == mode_val:
-                return k
+                return FRIDGE_MODE_LABELS.get(k, k)
         return None
 
     async def async_select_option(self, option: str) -> None:
-        mode_val = FRIDGE_MODE_VALUES.get(option, 0)
+        # 反查：从标签找到 key，再取 API 值
+        reverse_labels = {v: k for k, v in FRIDGE_MODE_LABELS.items()}
+        key = reverse_labels.get(option, option)
+        mode_val = FRIDGE_MODE_VALUES.get(key, 0)
         await self.hass.async_add_executor_job(
             self._api.send_control, self._device_id,
             {"workMode": mode_val},
         )
-
-    @property
-    def options(self) -> list:
-        return [FRIDGE_MODE_LABELS.get(m, m) for m in FRIDGE_MODES]
 
 
 # ──────────────── 童锁 (Lock) ────────────────

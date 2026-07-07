@@ -86,11 +86,16 @@ async def async_setup_entry(
     hass.data[DOMAIN]["api"] = api
     hass.data[DOMAIN]["devices"] = devices
 
-    # 4) 注册各平台（各平台从 hass.data 取设备信息自行建实体）
+    # 4) 注册各平台（逐平台捕获，定位具体失败点）
     for platform in PLATFORMS:
-        hass.async_create_task(
-            hass.config_entries.async_forward_entry_setup(entry, platform)
-        )
+        try:
+            await hass.config_entries.async_forward_entry_setup(entry, platform)
+            _LOGGER.info("tcl_ac: 平台 %s 加载成功", platform)
+        except Exception as exc:
+            _LOGGER.exception(
+                "tcl_ac: 平台 %s 加载失败（已跳过，不影响其他平台）: %s",
+                platform, exc,
+            )
 
     entry.async_on_unload(entry.add_update_listener(_update_listener))
     _LOGGER.info("tcl_ac v2.0 初始化完成：%d 台设备", len(devices))
