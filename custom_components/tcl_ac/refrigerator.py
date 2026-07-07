@@ -1,16 +1,15 @@
-"""TCL 冰箱实体：温度(Number) + 模式(Select) + 童锁(Lock) + 传感器(Sensor) + 电源(Switch)。"""
+"""TCL 冰箱实体：目标温度(Number) + 当前温度(只读 Sensor)。
+
+注：冰箱不建电源开关/童锁/模式实体（用户只需看当前温度与调整温度）。
+"""
 import logging
-from homeassistant.components.lock import LockEntity
 from homeassistant.components.number import NumberEntity
-from homeassistant.components.select import SelectEntity
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
-from homeassistant.components.switch import SwitchEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
-    FRIDGE_MODES, FRIDGE_MODE_LABELS, FRIDGE_MODE_VALUES,
     FRIDGE_FRIDGE_TEMP_MIN, FRIDGE_FRIDGE_TEMP_MAX,
     FRIDGE_FREEZER_TEMP_MIN, FRIDGE_FREEZER_TEMP_MAX,
     SCAN_INTERVAL_SECONDS,
@@ -126,112 +125,6 @@ class TclFridgeFreezerTemp(_TclFridgeEntity, NumberEntity):
         await self.hass.async_add_executor_job(
             self._api.send_control, self._device_id,
             {"freezeSetTemp": int(value)},
-        )
-
-
-# ──────────────── 冰箱模式 (Select) ────────────────
-
-class TclFridgeMode(_TclFridgeEntity, SelectEntity):
-    """冰箱运行模式选择（AI智能 / 速冷 / 速冻）。"""
-
-    _attr_icon = "mdi:tune"
-    _attr_options = [FRIDGE_MODE_LABELS.get(m, m) for m in FRIDGE_MODES]
-
-    def __init__(self, hass, api, device_id, device_name):
-        super().__init__(hass, api, device_id, device_name)
-        self._entity_name = "模式"
-        self._attr_unique_id = f"tcl_fridge_{device_id}_mode"
-
-    @property
-    def name(self):
-        return self._entity_name
-
-    @property
-    def current_option(self) -> str | None:
-        mode_val = self._get("workMode", 0)
-        for k, v in FRIDGE_MODE_VALUES.items():
-            if v == mode_val:
-                return FRIDGE_MODE_LABELS.get(k, k)
-        return None
-
-    async def async_select_option(self, option: str) -> None:
-        # 反查：从标签找到 key，再取 API 值
-        reverse_labels = {v: k for k, v in FRIDGE_MODE_LABELS.items()}
-        key = reverse_labels.get(option, option)
-        mode_val = FRIDGE_MODE_VALUES.get(key, 0)
-        await self.hass.async_add_executor_job(
-            self._api.send_control, self._device_id,
-            {"workMode": mode_val},
-        )
-
-
-# ──────────────── 童锁 (Lock) ────────────────
-
-class TclFridgeChildLock(_TclFridgeEntity, LockEntity):
-    """冰箱童锁开关。"""
-
-    _attr_icon = "mdi:lock-outline"
-
-    def __init__(self, hass, api, device_id, device_name):
-        super().__init__(hass, api, device_id, device_name)
-        self._entity_name = "童锁"
-        self._attr_unique_id = f"tcl_fridge_{device_id}_child_lock"
-
-    @property
-    def name(self):
-        return self._entity_name
-
-    @property
-    def is_locking(self) -> bool:
-        return False
-
-    @property
-    def is_locked(self) -> bool:
-        return bool(self._get("childLock", 0))
-
-    async def async_lock(self, **kwargs):
-        await self.hass.async_add_executor_job(
-            self._api.send_control, self._device_id,
-            {"childLock": 1},
-        )
-
-    async def async_unlock(self, **kwargs):
-        await self.hass.async_add_executor_job(
-            self._api.send_control, self._device_id,
-            {"childLock": 0},
-        )
-
-
-# ──────────────── 电源开关 (Switch) ────────────────
-
-class TclFridgePowerSwitch(_TclFridgeEntity, SwitchEntity):
-    """冰箱主电源开关。"""
-
-    _attr_icon = "mdi:power-plug"
-
-    def __init__(self, hass, api, device_id, device_name):
-        super().__init__(hass, api, device_id, device_name)
-        self._entity_name = "电源"
-        self._attr_unique_id = f"tcl_fridge_{device_id}_power"
-
-    @property
-    def name(self):
-        return self._entity_name
-
-    @property
-    def is_on(self) -> bool:
-        return bool(self._get("powerSwitch", 1))  # 冰箱默认常开
-
-    async def async_turn_on(self, **kwargs):
-        await self.hass.async_add_executor_job(
-            self._api.send_control, self._device_id,
-            {"powerSwitch": 1},
-        )
-
-    async def async_turn_off(self, **kwargs):
-        await self.hass.async_add_executor_job(
-            self._api.send_control, self._device_id,
-            {"powerSwitch": 0},
         )
 
 

@@ -37,9 +37,9 @@ CONTROL_SOURCE = "app"
 PLATFORM_TYPE = "iOS"
 USER_AGENT = "TCLPlus/2.6.1"
 
-# 设备类型（对应 API 返回的 category 字段）
-CATEGORY_AC = "ac"           # 空调
-CATEGORY_FRIDGE = "fridge"   # 冰箱
+# 设备类型（对应 API 返回的 category 字段，已通过 SSH 实际验证）
+CATEGORY_AC = "AC"           # 空调（API 返回大写 "AC"）
+CATEGORY_FRIDGE = "RF"       # 冰箱（API 返回 "RF"）
 CATEGORY_UNKNOWN = "unknown"
 
 # 空调模式映射

@@ -1,12 +1,10 @@
-"""Select 平台：冰箱模式（AI智能/速冷/速冻）。"""
+"""Select 平台：冰箱当前不创建模式选择实体（用户只需看当前温度与调整温度）。
+
+保留此平台转发占位，便于后续按需恢复。
+"""
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-
-from .const import DOMAIN, CATEGORY_FRIDGE
-from .__init__ import get_platform_devices
-from .api import TclApi
-from .refrigerator import TclFridgeMode
 
 
 async def async_setup_entry(
@@ -14,12 +12,5 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    api: TclApi = hass.data[DOMAIN]["api"]
-    devices = get_platform_devices(hass, CATEGORY_FRIDGE)
-    for dev in devices:
-        device_id = dev["deviceId"]
-        name = dev.get("nickName", f"TCL 冰箱 {device_id[-4:]}")
-        async_add_entities(
-            [TclFridgeMode(hass, api, device_id, name)],
-            update_before_add=True,
-        )
+    """冰箱不创建模式实体，本平台暂为空。"""
+    return

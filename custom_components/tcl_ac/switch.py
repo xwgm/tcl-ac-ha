@@ -1,4 +1,4 @@
-"""Switch 平台：通用设备电源开关 + 冰箱主电源。"""
+"""Switch 平台：仅通用设备（非空调/非冰箱）的电源开关。冰箱不需要电源开关。"""
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -7,7 +7,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import DOMAIN, CATEGORY_AC, CATEGORY_FRIDGE
 from .__init__ import get_platform_devices
 from .api import TclApi
-from .refrigerator import TclFridgePowerSwitch
 
 
 class TclGenericSwitch(SwitchEntity):
@@ -74,7 +73,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """为通用设备和冰箱创建 Switch 实体。"""
+    """仅为非空调/非冰箱的 app 可控设备创建通用电源开关。"""
     api: TclApi = hass.data[DOMAIN]["api"]
     all_devices = get_platform_devices(hass)
     entities = []
@@ -84,11 +83,9 @@ async def async_setup_entry(
         name = dev.get("nickName", f"TCL 设备 {device_id[-4:]}")
         category = dev.get("category", "unknown")
 
-        # 冰箱 → 电源开关实体
-        if category == CATEGORY_FRIDGE:
-            entities.append(TclFridgePowerSwitch(hass, api, device_id, name))
-        # 非空调/非冰箱的 app 可控设备 → 通用开关
-        elif category != CATEGORY_AC:
+        # 空调走 climate 平台；冰箱只保留温度（不建电源开关）；
+        # 其余 app 可控设备 → 通用开关
+        if category not in (CATEGORY_AC, CATEGORY_FRIDGE):
             entities.append(TclGenericSwitch(hass, api, device_id, name, category))
 
     if entities:
