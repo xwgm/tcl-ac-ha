@@ -1,11 +1,5 @@
-"""TCL Air Conditioner climate entity."""
-import json
+"""Climate 平台：空调设备（增强版：ECO / 睡眠 / 健康 / 矢量送风）。"""
 import logging
-import random
-import ssl
-import time
-import urllib.request
-import urllib.error
 from datetime import timedelta
 
 from homeassistant.components.climate import (
@@ -19,199 +13,43 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
-    CONFIG_FILE, DEVICE_ID, USERNAME, PASSWORD,
-    APP_ID, APP_TENANT_ID, APP_SECRET,
-    IOS_APP_ID, IOS_APP_SECRET, IOS_TENANT_ID, IOS_APP_VERSION,
-    IOS_PLATFORM_TYPE, IOS_STORE_UUID, IOS_USER_AGENT, IOS_REPORT_STATE,
-    LOGIN_API,
-    CONTROL_SOURCE, PLATFORM_TYPE, USER_AGENT,
+    DOMAIN, CATEGORY_AC,
     MODE_MAP, MODE_REVERSE, FAN_MAP,
+    PRESET_MODES, PRESET_MODE_LABELS,
+    SCAN_INTERVAL_SECONDS,
 )
-from . import crypto
+from .api import TclApi
 
 _LOGGER = logging.getLogger(__name__)
 
-SCAN_INTERVAL = timedelta(seconds=30)
 
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the TCL AC platform from a config entry (UI 添加集成时调用)."""
-    data = entry.data or {}
-    device_id = data.get("device_id") or ""
-    if not device_id:
-        _LOGGER.error("tcl_ac: device_id 未配置，请在 UI 添加集成时填写设备 ID")
+    """为所有空调设备创建 Climate 实体。"""
+    from . import __init__ as tcl_init  # noqa: F811
+
+    api: TclApi = hass.data[DOMAIN]["api"]
+    devices = tcl_init.get_platform_devices(hass, CATEGORY_AC)
+
+    if not devices:
+        _LOGGER.warning("tcl_ac: 未发现空调设备")
         return
-    # 账号密码：从 config entry 传入，用于 token 自动续期
-    username = data.get("username") or ""
-    password = data.get("password") or ""
-    async_add_entities(
-        [TclAcClimate(hass, device_id, username, password)],
-        update_before_add=True,
-    )
 
-class TclApi:
-    """TCL IoT API (stdlib only, runs in executor)."""
+    entities = []
+    for dev in devices:
+        device_id = dev["deviceId"]
+        name = dev.get("nickName", f"TCL 空调 {device_id[-4:]}")
+        entities.append(TclAcClimate(hass, api, device_id, name))
 
-    def __init__(self, device_id: str, username: str = "", password: str = ""):
-        self._device_id = device_id
-        self._username = username
-        self._password = password
-        self._token = ""
-        self._token_ts = 0.0
+    async_add_entities(entities, update_before_add=True)
 
-    def _load_config(self):
-        with open(CONFIG_FILE, "r") as f:
-            return json.load(f)
-
-    def _save_config(self, cfg):
-        with open(CONFIG_FILE, "w") as f:
-            json.dump(cfg, f, indent=2, ensure_ascii=False)
-
-    def _http(self, url, headers, data=None, method="GET"):
-        # data 可为 dict（自动 JSON 编码）或已是 bytes（如 RSA 加密后的登录体）
-        if isinstance(data, (bytes, bytearray)):
-            body = bytes(data)
-        elif data is not None:
-            body = json.dumps(data).encode()
-        else:
-            body = None
-        req = urllib.request.Request(url, data=body, headers=headers, method=method)
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:
-            return json.loads(resp.read().decode())
-
-    def get_token(self):
-        if self._token and (time.time() - self._token_ts) < 3000:
-            return self._token
-        cfg = self._load_config()
-        # 1) 先用 refreshToken 续期
-        try:
-            url = (
-                f"https://cn.account.tcl.com/auth/auth/refershToken"
-                f"?appId={APP_ID}&accountId={cfg.get('account_id', '')}"
-                f"&tenantId={APP_TENANT_ID}&appSecret={APP_SECRET}"
-            )
-            headers = {
-                "Host": "cn.account.tcl.com",
-                "Content-Type": "application/json;charset=UTF-8",
-                "t-platform-type": "iOS",
-                "Encrypt": "false",
-                "EncryptVersion": "2.0",
-                "t-app-version": "2.7.33",
-                "t-store-uuid": "TCL+",
-                "User-Agent": "TCLPlus/2.6.1",
-                "refreshToken": cfg.get("refresh_token", ""),
-            }
-            result = self._http(url, headers)
-            self._token = result["accessToken"]
-            self._token_ts = time.time()
-            cfg["access_token"] = self._token
-            cfg["refresh_token"] = result["refreshToken"]
-            cfg["access_token_ts"] = self._token_ts
-            self._save_config(cfg)
-            _LOGGER.debug("tcl_ac: token 刷新成功")
-            return self._token
-        except Exception as err:
-            # 2) refresh 失败且有账号密码 → 自动登录获取新 token
-            if self._username and self._password:
-                _LOGGER.warning(
-                    "tcl_ac: refreshToken 失效（%s），尝试用账号密码重新登录", err
-                )
-                return self.login_by_password(self._username, self._password)
-            # 3) 无账号密码 → 明确告警，提示用户重抓
-            _LOGGER.error(
-                "tcl_ac: token 已过期且未配置账号密码，请在 Windows 重跑 grab_token.py "
-                "覆盖 /config/tcl_token.json，或在 configuration.yaml 的 tcl_ac: 段填 username/password"
-            )
-            raise
-
-    def login_by_password(self, username: str, password: str) -> str:
-        """账号密码登录：加密参数 → 登录 → 写回 token 文件。"""
-        import uuid
-
-        device_id = str(uuid.uuid4()).upper()
-        params = {
-            "deviceId": device_id,
-            "password": crypto.md5_hash(password),
-            "channel": IOS_STORE_UUID,
-            "tenantId": IOS_TENANT_ID,
-            "appSecret": IOS_APP_SECRET,
-            "username": username,
-            "appId": IOS_APP_ID,
-            "reportState": IOS_REPORT_STATE,
-        }
-        url = f"{LOGIN_API}?{crypto.encrypt_url_params(params)}"
-        body = crypto.encrypt_body(params)
-        headers = {
-            "Content-Type": "application/json;charset=UTF-8",
-            "t-platform-type": IOS_PLATFORM_TYPE,
-            "uid": "",
-            "Accept": "*/*",
-            "cid": str(uuid.uuid4()).upper(),
-            "Accept-Language": "zh-Hans-CN;q=1, zh-Hant-CN;q=0.9, en-CN;q=0.8",
-            "token": "",
-            "EncryptVersion": "2.0",
-            "t-app-version": IOS_APP_VERSION,
-            "t-store-uuid": IOS_STORE_UUID,
-            "Encrypt": "true",
-            "User-Agent": IOS_USER_AGENT,
-            "t-application-name": "",
-        }
-        result = self._http(url, headers, data=body, method="POST")
-        if "accessToken" not in result:
-            raise RuntimeError(f"TCL 密码登录失败: {result.get('message', result)}")
-        self._token = result["accessToken"]
-        self._token_ts = time.time()
-        cfg = self._load_config()
-        cfg["account_id"] = result["accountId"]
-        cfg["access_token"] = self._token
-        cfg["refresh_token"] = result["refreshToken"]
-        cfg["access_token_ts"] = self._token_ts
-        self._save_config(cfg)
-        _LOGGER.info("tcl_ac: 账号密码登录成功，已更新 token")
-        return self._token
-
-    def _iot_headers(self):
-        # 请求标识
-        return {
-            "Host": "io.zx.tcljd.com",
-            "accessToken": self.get_token(),
-            "t-app-version": "2.7.33",
-            "t-store-uuid": "TCL+",
-            "Content-Type": "application/json;charset=UTF-8",
-            "t-platform-type": PLATFORM_TYPE,
-            "User-Agent": USER_AGENT,
-        }
-
-    def get_status(self):
-        return self._http(
-            "https://io.zx.tcljd.com/v1/thing/status",
-            self._iot_headers(),
-            data={"deviceId": self._device_id},
-            method="POST",
-        ).get("data", {}).get("status", {})
-
-    def send_control(self, attrs: dict) -> bool:
-        url = f"https://io.zx.tcljd.com/v1/control/property/{self._device_id}"
-        body = {
-            "msgId": f"ha_{int(random.random()*1e5)}_{int(time.time()*1000)}",
-            "source": CONTROL_SOURCE,  # 控制请求 source 参数
-            "version": "3.0.0",
-            "params": [{k: v} for k, v in attrs.items()],
-        }
-        result = self._http(url, self._iot_headers(), data=body, method="POST")
-        return result.get("code") == "200"
 
 class TclAcClimate(ClimateEntity):
-    """TCL AC climate entity."""
+    """TCL AC climate entity（per-device，支持 ECO/睡眠/健康预设模式）。"""
 
-    _attr_name = "TCL 空调"
-    _attr_unique_id = "tcl_ac_climate"
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = [
         HVACMode.OFF, HVACMode.AUTO, HVACMode.COOL,
@@ -228,26 +66,43 @@ class TclAcClimate(ClimateEntity):
         | ClimateEntityFeature.SWING_MODE
         | ClimateEntityFeature.TURN_ON
         | ClimateEntityFeature.TURN_OFF
+        | ClimateEntityFeature.PRESET_MODE
     )
+    _attr_preset_modes = PRESET_MODES
+    _attr_should_poll = True
 
-    def __init__(self, hass: HomeAssistant, device_id: str, username: str = "", password: str = ""):
+    def __init__(self, hass: HomeAssistant, api: TclApi, device_id: str, name: str):
         self.hass = hass
+        self._api = api
         self._device_id = device_id
-        self._api = TclApi(device_id, username, password)
+        self._attr_name = name
+        self._attr_unique_id = f"tcl_ac_{device_id}"
         self._attr_hvac_mode = HVACMode.OFF
         self._attr_current_temperature = None
         self._attr_target_temperature = 26
         self._attr_fan_mode = "auto"
         self._attr_swing_mode = "off"
-        self._extra = {}
+        self._attr_preset_mode = "none"
+        self._extra: dict = {}
 
     @property
-    def extra_state_attributes(self):
+    def extra_state_attributes(self) -> dict:
         return self._extra
+
+    @property
+    def device_info(self):
+        return {
+            "identifiers": {(DOMAIN, self._device_id)},
+            "name": self._attr_name,
+            "manufacturer": "TCL",
+            "model": "Air Conditioner",
+        }
 
     async def async_update(self):
         try:
-            status = await self.hass.async_add_executor_job(self._api.get_status)
+            status = await self.hass.async_add_executor_job(
+                self._api.get_status, self._device_id
+            )
         except Exception:
             _LOGGER.exception("TCL AC status fetch failed")
             return
@@ -288,18 +143,37 @@ class TclAcClimate(ClimateEntity):
         else:
             self._attr_swing_mode = "off"
 
+        # 预设模式状态解析
+        eco_val = status.get("ECO", 0)
+        sleep_val = status.get("sleep", 0)
+        health_val = status.get("health", 0)
+
+        if eco_val == 1:
+            self._attr_preset_mode = "eco"
+        elif sleep_val == 1:
+            self._attr_preset_mode = "sleep"
+        elif health_val == 1:
+            self._attr_preset_mode = "health"
+        else:
+            self._attr_preset_mode = "none"
+
         self._extra = {
-            "eco": status.get("ECO", 0),
+            "eco": eco_val,
             "screen": status.get("screen", 0),
             "beep": status.get("beepSwitch", 1),
-            "sleep": status.get("sleep", 0),
+            "sleep": sleep_val,
+            "health": health_val,
             "self_clean": status.get("selfClean", 0),
             "fan_pct": fan_pct,
             "external_temp": status.get("externalUnitTemperature", 0),
         }
 
-    async def _send(self, attrs):
-        ok = await self.hass.async_add_executor_job(self._api.send_control, attrs)
+    # ──────────────── 控制方法 ────────────────
+
+    async def _send(self, attrs: dict):
+        ok = await self.hass.async_add_executor_job(
+            self._api.send_control, self._device_id, attrs
+        )
         if not ok:
             _LOGGER.warning("TCL AC control failed: %s", attrs)
         await self.async_update()
@@ -336,3 +210,16 @@ class TclAcClimate(ClimateEntity):
         v = 1 if swing_mode in ("vertical", "both") else 0
         h = 1 if swing_mode in ("horizontal", "both") else 0
         await self._send({"verticalWind": v, "horizontalWind": h})
+
+    # ──────────────── 预设模式（新增） ────────────────
+
+    async def async_set_preset_mode(self, preset_mode: str):
+        """设置预设模式：none(关闭)/eco(节能)/sleep(睡眠)/health(健康)。"""
+        attrs = {"ECO": 0, "sleep": 0, "health": 0}
+        if preset_mode == "eco":
+            attrs["ECO"] = 1
+        elif preset_mode == "sleep":
+            attrs["sleep"] = 1
+        elif preset_mode == "health":
+            attrs["health"] = 1
+        await self._send(attrs)

@@ -1,41 +1,38 @@
-# TCL 空调 Home Assistant 集成（tcl_ac）
+# TCL AC — Home Assistant 集成
 
-将 TCL 空调接入 Home Assistant，支持状态查询、开关机、调温（16~31°C）、模式/风速/摆风控制。支持 config_flow UI 添加，可选填账号密码启用 token 自动续期。
+将 TCL 空调、冰箱及账号下其他可控设备接入 Home Assistant。只需在 UI 填入手机号和密码，集成会自动发现并添加该账号下的全部设备，无需逐个配置。
+
+## 支持设备
+
+- **空调（climate）**：开关、调温（16~31°C）、模式、风速、摆风、节能/睡眠/健康等预设
+- **冰箱（number / select / lock / switch / sensor）**：冷藏/冷冻温区温度、工作模式、童锁、电源、实时状态读数
+- **其他 App 可控设备（switch）**：电源开关
 
 ## 安装
 
-1. HACS → 自定义仓库，添加 `https://github.com/<用户名>/tcl-ac-ha`，类别 Integration
+1. HACS → 自定义仓库，添加 `https://github.com/xwgm/tcl-ac-ha`，类别 Integration
 2. 下载 TCL AC → 重启 HA
 3. 设置 → 设备与服务 → 添加集成 → 搜 TCL AC
-4. 填 `device_id`（必填）；`username`/`password` 可选，填则启用自动续期
-5. 提交，实体 `climate.tcl_空调_<device_id>` 出现
+4. 填手机号、密码，提交
+5. 集成自动拉取账号下所有设备并创建对应实体
 
-## Token 获取
+## 升级（从 v1.x）
 
-用仓库 `grab_token.py` 提取微信小程序登录 token，写入 HA `/config/tcl_token.json`。
+v2.0 改为账号级接入，配置项与旧版不兼容：
 
-```bash
-python -m venv venv
-venv\Scripts\pip install mitmproxy requests
-venv\Scripts\mitmdump.exe --listen-port 18888   # 生成 CA 后 Ctrl+C
-certutil.exe -addstore -user "Root" "$env:USERPROFILE\.mitmproxy\mitmproxy-ca-cert.cer"
-venv\Scripts\python.exe grab_token.py            # 微信电脑版打开 TCL 小程序触发登录
-```
-
-`device_id` 用 `verify_token.py` 查（`category: AC` 的 `deviceId`）。
-
-`/config` 属主为 root，用 HA 内 Studio Code Server / File editor 或 Samba 写入，勿用飞牛文件管理器。
+- 先在「设置 → 设备与服务」中**删除旧的 TCL AC 集成条目**
+- 再按上面步骤重新添加，填手机号 + 密码即可
+- 旧的 `tcl_token.json` 可保留，集成会自动复用并刷新
 
 ## 续期
 
-- 填账号密码：token 过期时自动重登续期，无需手动操作。
-- 未填账号密码：token 过期后重跑 `grab_token.py` 覆盖 `/config/tcl_token.json`。
+登录凭据由集成在本地管理：token 临近失效时自动刷新；极端情况下（刷新失败且凭据仍有效）会自动重新登录续期，无需手动干预。
 
 ## 排查
 
-- 实体未出现：查日志 `tcl_ac`，多为 device_id 未配或 token 失效。
-- 状态超时：确认容器网络可访问空调云服务。
+- 设备未出现：确认手机号/密码正确、账号下设备在线；查 HA 日志 `tcl_ac`
+- 状态不刷新：确认 HA 所在网络可访问设备云服务
 
 ## 安全
 
-`tcl_token.json` 含账号凭据，勿入仓库。本仓库不含该文件。
+账号凭据仅保存在 HA 配置目录（如 `/config/tcl_token.json`），本仓库不含任何凭据文件。

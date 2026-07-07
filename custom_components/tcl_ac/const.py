@@ -1,9 +1,6 @@
 DOMAIN = "tcl_ac"
 
 CONFIG_FILE = "/config/tcl_token.json"
-# 留空即可；device_id 请在 configuration.yaml 的 tcl_ac: 段填写，
-# 这样 HACS 更新组件时不会覆盖你的配置。
-DEVICE_ID = ""
 
 # 账号密码（可选）：填写后启用 token 自动刷新
 # 都不填 = 纯 refreshToken 模式（refreshToken 过期需手动重抓）；
@@ -25,16 +22,58 @@ IOS_APP_VERSION = "2.6.1(1344)"
 IOS_PLATFORM_TYPE = "iOS"
 IOS_STORE_UUID = "TCL+"
 IOS_USER_AGENT = "TCLPlus/2.6.1 (iPhone; iOS 15.4.1; Scale/3.00)"
-IOS_REPORT_STATE = '{"os":"iOS","osVersion":"15.4.1","appVersion":"2.6.1","deviceModel":"iPhone"}'
+IOS_REPORT_STATE = '{"os":"iOS","osVersion":"15.4.1","appVersion":"2.6.1","deviceModel":"iPhone"}'  # noqa: E501
 # 账号密码登录接口（参数需 RSA 加密，见 crypto.py）
 LOGIN_API = "https://cn.account.tcl.com/auth/auth/login"
+
+# IoT API 端点
+IOT_HOST = "io.zx.tcljd.com"
+DEVICE_STATUS_API = f"https://{IOT_HOST}/v1/thing/status"
+CONTROL_DEVICE_API = f"https://{IOT_HOST}/v1/control/property/{{device_id}}"
+GET_DEVICES_API = f"https://{IOT_HOST}/v1/tclplus/weChat/user/user_devices"
 
 # 控制请求标识
 CONTROL_SOURCE = "app"
 PLATFORM_TYPE = "iOS"
 USER_AGENT = "TCLPlus/2.6.1"
 
+# 设备类型（对应 API 返回的 category 字段）
+CATEGORY_AC = "ac"           # 空调
+CATEGORY_FRIDGE = "fridge"   # 冰箱
+CATEGORY_UNKNOWN = "unknown"
+
+# 空调模式映射
 MODE_MAP = {"auto": 0, "cool": 1, "dry": 2, "fan": 3, "heat": 4}
 MODE_REVERSE = {0: "auto", 1: "cool", 2: "dry", 3: "fan_only", 4: "heat"}
 
 FAN_MAP = {"auto": 0, "low": 20, "medium": 50, "high": 75, "full": 100}
+
+# 空调预设模式
+PRESET_MODES = ["none", "eco", "sleep", "health"]
+PRESET_MODE_LABELS = {
+    "none": "普通",
+    "eco": "节能",
+    "sleep": "睡眠",
+    "health": "健康",
+}
+
+# 冰箱模式
+FRIDGE_MODES = ["ai", "quick_cool", "quick_freeze"]
+FRIDGE_MODE_LABELS = {
+    "ai": "AI智能",
+    "quick_cool": "速冷",
+    "quick_freeze": "速冻",
+}
+FRIDGE_MODE_VALUES = {  # API 值
+    "ai": 0,
+    "quick_cool": 1,
+    "quick_freeze": 2,
+}
+
+# 冰箱温度范围（根据 App 截图）
+FRIDGE_FRIDGE_TEMP_MIN = 2     # 冷藏室最低
+FRIDGE_FRIDGE_TEMP_MAX = 8     # 冷藏室最高
+FRIDGE_FREEZER_TEMP_MIN = -24  # 冷冻室最低
+FRIDGE_FREEZER_TEMP_MAX = -15  # 冷冻室最高
+
+SCAN_INTERVAL_SECONDS = 30
