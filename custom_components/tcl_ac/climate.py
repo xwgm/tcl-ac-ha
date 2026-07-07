@@ -19,6 +19,7 @@ from .const import (
     SCAN_INTERVAL_SECONDS,
 )
 from .api import TclApi
+from .__init__ import get_platform_devices
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -29,10 +30,8 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """为所有空调设备创建 Climate 实体。"""
-    from . import __init__ as tcl_init  # noqa: F811
-
     api: TclApi = hass.data[DOMAIN]["api"]
-    devices = tcl_init.get_platform_devices(hass, CATEGORY_AC)
+    devices = get_platform_devices(hass, CATEGORY_AC)
 
     if not devices:
         _LOGGER.warning("tcl_ac: 未发现空调设备")

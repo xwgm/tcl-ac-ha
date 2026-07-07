@@ -5,7 +5,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN, CATEGORY_AC, CATEGORY_FRIDGE
-from . import __init__
+from .__init__ import get_platform_devices
 from .api import TclApi
 from .refrigerator import TclFridgePowerSwitch
 
@@ -74,7 +74,7 @@ async def async_setup_entry(
 ) -> None:
     """为通用设备和冰箱创建 Switch 实体。"""
     api: TclApi = hass.data[DOMAIN]["api"]
-    all_devices = __init__.get_platform_devices(hass)
+    all_devices = get_platform_devices(hass)
     entities = []
 
     for dev in all_devices:
