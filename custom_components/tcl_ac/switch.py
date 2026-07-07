@@ -13,6 +13,7 @@ from .refrigerator import TclFridgePowerSwitch
 class TclGenericSwitch(SwitchEntity):
     """TCL 通用设备电源开关（非空调/非冰箱）。"""
 
+    _attr_has_entity_name = True
     _attr_should_poll = True
 
     def __init__(
@@ -26,7 +27,8 @@ class TclGenericSwitch(SwitchEntity):
         self.hass = hass
         self._api = api
         self._device_id = device_id
-        self._attr_name = name
+        self._device_name = name
+        self._attr_name = None
         self._attr_unique_id = f"tcl_switch_{device_id}"
         self._category = category
         self._status_cache: dict = {}
@@ -35,7 +37,7 @@ class TclGenericSwitch(SwitchEntity):
     def device_info(self):
         return {
             "identifiers": {(DOMAIN, self._device_id)},
-            "name": self._attr_name,
+            "name": self._device_name,
             "manufacturer": "TCL",
             "model": f"Device ({self._category})",
         }

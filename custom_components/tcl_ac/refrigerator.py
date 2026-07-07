@@ -3,7 +3,7 @@ import logging
 from homeassistant.components.lock import LockEntity
 from homeassistant.components.number import NumberEntity
 from homeassistant.components.select import SelectEntity
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import Entity
@@ -34,6 +34,7 @@ except ImportError:
 class _TclFridgeEntity(Entity):
     """冰箱实体的基类（用 Entity 而非 RestoreEntity，避免 restore 复杂度）。"""
 
+    _attr_has_entity_name = True
     _attr_should_poll = True
 
     def __init__(self, hass: HomeAssistant, api: TclApi, device_id: str, device_name: str):
@@ -76,7 +77,7 @@ class TclFridgeFridgeTemp(_TclFridgeEntity, NumberEntity):
 
     def __init__(self, hass, api, device_id, device_name):
         super().__init__(hass, api, device_id, device_name)
-        self._entity_name = f"{device_name} 冷藏室温度"
+        self._entity_name = "冷藏室温度"
         self._attr_unique_id = f"tcl_fridge_{device_id}_fridge_temp"
         if HAS_NUMBER_MODE:
             self._attr_mode = NumberMode.SLIDER
@@ -108,7 +109,7 @@ class TclFridgeFreezerTemp(_TclFridgeEntity, NumberEntity):
 
     def __init__(self, hass, api, device_id, device_name):
         super().__init__(hass, api, device_id, device_name)
-        self._entity_name = f"{device_name} 冷冻室温度"
+        self._entity_name = "冷冻室温度"
         self._attr_unique_id = f"tcl_fridge_{device_id}_freezer_temp"
         if HAS_NUMBER_MODE:
             self._attr_mode = NumberMode.SLIDER
@@ -138,7 +139,7 @@ class TclFridgeMode(_TclFridgeEntity, SelectEntity):
 
     def __init__(self, hass, api, device_id, device_name):
         super().__init__(hass, api, device_id, device_name)
-        self._entity_name = f"{device_name} 模式"
+        self._entity_name = "模式"
         self._attr_unique_id = f"tcl_fridge_{device_id}_mode"
 
     @property
@@ -173,7 +174,7 @@ class TclFridgeChildLock(_TclFridgeEntity, LockEntity):
 
     def __init__(self, hass, api, device_id, device_name):
         super().__init__(hass, api, device_id, device_name)
-        self._entity_name = f"{device_name} 童锁"
+        self._entity_name = "童锁"
         self._attr_unique_id = f"tcl_fridge_{device_id}_child_lock"
 
     @property
@@ -210,7 +211,7 @@ class TclFridgePowerSwitch(_TclFridgeEntity, SwitchEntity):
 
     def __init__(self, hass, api, device_id, device_name):
         super().__init__(hass, api, device_id, device_name)
-        self._entity_name = f"{device_name} 开关"
+        self._entity_name = "电源"
         self._attr_unique_id = f"tcl_fridge_{device_id}_power"
 
     @property
@@ -252,13 +253,13 @@ class TclFridgeSensor(_TclFridgeEntity, SensorEntity):
         unit: str,
     ):
         super().__init__(hass, api, device_id, device_name)
-        self._sensor_name = f"{device_name} {sensor_name}"
+        self._sensor_name = sensor_name
         self._status_key = status_key
         self._unit = unit
         self._attr_unique_id = f"tcl_fridge_{device_id}_{status_key}"
         if unit == "\u00b0C":
             self._attr_native_unit_of_measurement = "\u00b0C"
-            self._attr_device_class = "temperature"
+            self._attr_device_class = SensorDeviceClass.TEMPERATURE
             self._attr_icon = "mdi:thermometer"
 
     @property

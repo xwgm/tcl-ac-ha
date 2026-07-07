@@ -26,6 +26,9 @@ class TclConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             elif not password:
                 errors["password"] = "password_required"
             else:
+                # 防止同一手机号账号重复添加
+                await self.async_set_unique_id(username)
+                self._abort_if_unique_id_configured()
                 # 尝试登录验证凭据有效性
                 try:
                     api = TclApi()

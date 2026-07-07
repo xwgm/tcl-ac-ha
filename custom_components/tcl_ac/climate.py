@@ -50,6 +50,7 @@ class TclAcClimate(ClimateEntity):
     """TCL AC climate entity（per-device，支持 ECO/睡眠/健康预设模式）。"""
 
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_has_entity_name = True
     _attr_hvac_modes = [
         HVACMode.OFF, HVACMode.AUTO, HVACMode.COOL,
         HVACMode.DRY, HVACMode.FAN_ONLY, HVACMode.HEAT,
@@ -74,7 +75,8 @@ class TclAcClimate(ClimateEntity):
         self.hass = hass
         self._api = api
         self._device_id = device_id
-        self._attr_name = name
+        self._device_name = name
+        self._attr_name = None
         self._attr_unique_id = f"tcl_ac_{device_id}"
         self._attr_hvac_mode = HVACMode.OFF
         self._attr_current_temperature = None
@@ -92,7 +94,7 @@ class TclAcClimate(ClimateEntity):
     def device_info(self):
         return {
             "identifiers": {(DOMAIN, self._device_id)},
-            "name": self._attr_name,
+            "name": self._device_name,
             "manufacturer": "TCL",
             "model": "Air Conditioner",
         }
