@@ -86,16 +86,29 @@ async def async_setup_entry(
     hass.data[DOMAIN]["api"] = api
     hass.data[DOMAIN]["devices"] = devices
 
-    # 4) 注册各平台（逐平台捕获，定位具体失败点）
-    for platform in PLATFORMS:
+    # 4) 注册各平台（兼容 HA 2026.x 新 API）
+    # HA 2026.x 移除了 async_forward_entry_setup，改用 async_forward_entry_setups
+    _forward = getattr(
+        hass.config_entries, "async_forward_entry_setups", None
+    )
+    if _forward is not None:
+        # 新版 HA：一次性转发所有平台
         try:
-            await hass.config_entries.async_forward_entry_setup(entry, platform)
-            _LOGGER.info("tcl_ac: 平台 %s 加载成功", platform)
+            await _forward(entry, PLATFORMS)
+            _LOGGER.info("tcl_ac: 全部平台加载完成: %s", PLATFORMS)
         except Exception as exc:
-            _LOGGER.exception(
-                "tcl_ac: 平台 %s 加载失败（已跳过，不影响其他平台）: %s",
-                platform, exc,
-            )
+            _LOGGER.exception("tcl_ac: 平台加载失败: %s", exc)
+    else:
+        # 旧版 HA：逐个转发（带异常捕获定位失败点）
+        for platform in PLATFORMS:
+            try:
+                await hass.config_entries.async_forward_entry_setup(entry, platform)
+                _LOGGER.info("tcl_ac: 平台 %s 加载成功", platform)
+            except Exception as exc:
+                _LOGGER.exception(
+                    "tcl_ac: 平台 %s 加载失败（已跳过，不影响其他平台）: %s",
+                    platform, exc,
+                )
 
     entry.async_on_unload(entry.add_update_listener(_update_listener))
     _LOGGER.info("tcl_ac v2.0 初始化完成：%d 台设备", len(devices))
@@ -103,11 +116,19 @@ async def async_setup_entry(
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """卸载集成。"""
-    unload_ok = all(
-        await hass.config_entries.async_forward_entry_unload(entry, platform)
-        for platform in PLATFORMS
+    """卸载集成（兼容新旧 HA API）。"""
+    _unload = getattr(
+        hass.config_entries, "async_forward_entry_unloads", None
     )
+    if _unload is not None:
+        # 新版 HA
+        unload_ok = await _unload(entry, PLATFORMS)
+    else:
+        # 旧版 HA
+        unload_ok = all(
+            await hass.config_entries.async_forward_entry_unload(entry, platform)
+            for platform in PLATFORMS
+        )
     if DOMAIN in hass.data:
         del hass.data[DOMAIN]
     return unload_ok
